@@ -70,6 +70,9 @@ static int test_interrupt_transfer(void)
 				data = answer[1] << 8;
 				data |= answer[0];
 				printf("%d\n", data);
+				if (data == 0) {
+					temp = -1;
+				}
 				if ((data - temp) != 1) {
 					fprintf(stderr, "Data Loss at data %d\n", data);
 					return -1;

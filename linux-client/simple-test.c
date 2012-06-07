@@ -31,10 +31,13 @@ static int test_interrupt_transfer(void)
 	unsigned char answer[PACKET_INT_LEN];
 	unsigned char question[PACKET_INT_LEN];
 
+	printf("Starting...\n");
+	getchar();
+
 	/* initialize write data */
 	for (i = 0; i < PACKET_INT_LEN; i++) question[i] = 0x00 + i;
-
-	/* write to interrupt-out endpoint */
+//while(1) {
+	// write to interrupt-out endpoint
 	r = libusb_interrupt_transfer(devh, ENDPOINT_INT_OUT, question, PACKET_INT_LEN,
 			&transferred, TIMEOUT);
 	if (r < 0) {
@@ -42,8 +45,10 @@ static int test_interrupt_transfer(void)
 		return r;
 	}
 	printf("Written %d bytes\n", transferred);
+	getchar();
 
-	/* read from interrupt-in endpoint */
+//while(1) {
+	// read from interrupt-in endpoint
 	r = libusb_interrupt_transfer(devh, ENDPOINT_INT_IN, answer, PACKET_INT_LEN,
 			&transferred, TIMEOUT);
 	if (r < 0) {
@@ -55,6 +60,7 @@ static int test_interrupt_transfer(void)
 		return -1;
 	}
 	printf("Read %d bytes\n", transferred);
+// } 
 
 	for (i = 0; i < PACKET_INT_LEN; i++) {
 		if (i % 8 == 0)
@@ -62,6 +68,7 @@ static int test_interrupt_transfer(void)
 		printf("%02d  ", answer[i]);
 	}
 	printf("\n");
+	getchar();
 
 	return 0;
 }

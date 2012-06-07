@@ -49,6 +49,12 @@ int main(void)
 
 	for (;;)
 	{
+		if (counter > 60000)
+			counter = 0;
+		else
+			counter++;
+
+		_delay_ms(10);
 		HID_Task();
 		USB_USBTask();
 	}
@@ -150,8 +156,8 @@ void ProcessGenericHIDReport(uint8_t* DataArray)
 		holding the report sent from the host.
 	*/
 
-	Serial_SendString("ProcessGenericHIDReport\r\n");
-	counter = 1; /* reset counter to 1 */
+	//Serial_SendString("ProcessGenericHIDReport\r\n");
+	//counter = 10; /* reset counter to 1 */
 }
 
 /** Function to create the next report to send back to the host at the next reporting interval.
@@ -167,15 +173,15 @@ void CreateGenericHIDReport(uint8_t* DataArray)
 	*/
 
 	int temp = 0;
-
-	Serial_SendString("CreateGenericHIDReport\r\n");
-
 	char *c = (char *)&counter;
+	//counter++;
+
+	//Serial_SendString("CreateGenericHIDReport\r\n");
+
 	DataArray[0] = *c;
 	DataArray[1] = *(c+1);
 	for (temp = 2; temp < 64; temp++)
 		DataArray[temp] = temp;
-	counter++;
 }
 
 void HID_Task(void)
