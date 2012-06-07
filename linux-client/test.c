@@ -7,36 +7,17 @@
 #include <unistd.h>
 #include <libusb-1.0/libusb.h>
 
-#define VERSION "0.1.0"
 #define VENDOR_ID 0x03eb
 #define PRODUCT_ID 0x204f
-#define TEST_COUNT 100
 
-// HID Class-Specific Requests values. See section 7.2 of the HID specifications
-#define HID_GET_REPORT                0x01
-#define HID_GET_IDLE                  0x02
-#define HID_GET_PROTOCOL              0x03
-#define HID_SET_REPORT                0x09
-#define HID_SET_IDLE                  0x0A
-#define HID_SET_PROTOCOL              0x0B
-#define HID_REPORT_TYPE_INPUT         0x01
-#define HID_REPORT_TYPE_OUTPUT        0x02
-#define HID_REPORT_TYPE_FEATURE       0x03
+#define TEST_COUNT 5
+#define DUMMY_READ
 
-#define CTRL_IN        LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE
-#define CTRL_OUT       LIBUSB_ENDPOINT_OUT|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE
-
-const static int PACKET_INT_LEN = 8;
+const static int PACKET_INT_LEN = 64;
 const static int INTERFACE = 0;
-const static int ENDPOINT_INT_IN = 0x81; /* endpoint 0x81 address for IN */
-const static int ENDPOINT_INT_OUT = 0x02; /* endpoint 0x02 address for OUT */
-const static int TIMEOUT = 5000; /* timeout in ms */
-
-void bad(const char *why)
-{
-	fprintf(stderr,"Fatal error> %s\n",why);
-	exit(17);
-}
+const static int ENDPOINT_INT_IN = 0x81;	/* endpoint 0x81 address for IN */
+const static int ENDPOINT_INT_OUT = 0x02;	/* endpoint 0x02 address for OUT */
+const static int TIMEOUT = 5000;		/* timeout in ms */
 
 static struct libusb_device_handle *devh = NULL;
 
@@ -50,26 +31,32 @@ static int test_interrupt_transfer(void)
 {
 	int r, i;
 	int transferred;
-	char answer[PACKET_INT_LEN];
-	char question[PACKET_INT_LEN];
+	unsigned char answer[PACKET_INT_LEN];
+	unsigned char question[PACKET_INT_LEN];
+
+	unsigned int data;
+	unsigned int temp;
 
 	struct timeval start, end;
 	long delay, seconds, useconds;
 	int count;
 
-	/* write to interrupt-out endpoint */
 	for (i = 0; i < PACKET_INT_LEN; i++) question[i] = 0x00 + i;
-	r = libusb_interrupt_transfer(devh, ENDPOINT_INT_OUT, question, PACKET_INT_LEN,
-			&transferred, TIMEOUT);
-	if (r < 0) {
-		fprintf(stderr, "Interrupt write error %d\n", r);
-		return r;
-	}
 
-	/* read from interrupt-in endpoint */
-	printf("Starting read test...\n");
-	gettimeofday(&start, NULL);
-	for (count = 1; count <= TEST_COUNT; count++) {
+	while (1) {
+		data = 0;
+		
+		/* write to interrupt-out endpoint */
+		r = libusb_interrupt_transfer(devh, ENDPOINT_INT_OUT, question, PACKET_INT_LEN,
+				&transferred, TIMEOUT);
+		if (r < 0) {
+			fprintf(stderr, "Interrupt write error %d\n", r);
+			return r;
+		}
+		printf("Written %d bytes\n", transferred);
+
+#ifdef DUMMY_READ
+		/* do a dummy read cycle */
 		r = libusb_interrupt_transfer(devh, ENDPOINT_INT_IN, answer, PACKET_INT_LEN,
 				&transferred, TIMEOUT);
 		if (r < 0) {
@@ -80,15 +67,44 @@ static int test_interrupt_transfer(void)
 			fprintf(stderr, "Interrupt transfer short read (%d)\n", r);
 			return -1;
 		}
-	}
-	gettimeofday(&end, NULL);
-	count--;
+		printf("Read %d bytes\n", transferred);
+#endif
 
-	/* calculating delay */
-	seconds = end.tv_sec - start.tv_sec;
-	useconds = end.tv_usec - start.tv_usec;
-	delay = ((seconds * 1000) + (useconds / 1000.0));
-	printf("Time taken to read %d packets is %ld micro seconds, average read delay is %ld micro seconds\n", count, delay, delay/count);
+		/* read from interrupt-in endpoint */
+		printf("Starting read test...\n");
+		gettimeofday(&start, NULL);
+		for (count = 1; count <= TEST_COUNT; count++) {
+			r = libusb_interrupt_transfer(devh, ENDPOINT_INT_IN, answer, PACKET_INT_LEN,
+					&transferred, TIMEOUT);
+			if (r < 0) {
+				fprintf(stderr, "Interrupt read error %d\n", r);
+				return r;
+			}
+			if (transferred < PACKET_INT_LEN) {
+				fprintf(stderr, "Interrupt transfer short read (%d)\n", r);
+				return -1;
+			}
+
+			/* validating data received. whether it is one more than last read */
+			temp = data;
+			data = answer[1] << 8;
+			data |= answer[0];
+			printf("%d\n", data);
+			if ((data - temp) != 1) {
+				fprintf(stderr, "Data Loss at data %d\n", data);
+				return -1;
+			}
+		}
+		gettimeofday(&end, NULL);
+		count--;	/* removing the last undesired count from the previous for loop */
+
+		/* calculating delay */
+		seconds = end.tv_sec - start.tv_sec;
+		useconds = end.tv_usec - start.tv_usec;
+		delay = ((seconds * 1000) + (useconds / 1000.0));
+		printf("Time taken to read %d packets is %ld micro seconds, average read delay is %ld micro seconds\n", count, delay, delay/count);
+
+	} // END OF MAIN WHILE
 
 	for (i = 0; i < PACKET_INT_LEN; i++) {
 		if (i % 8 == 0)
@@ -104,6 +120,7 @@ static int test_interrupt_transfer(void)
 int main(void)
 {
 	int r = 1;
+	time_t cur_time; /* current time */
 
 	r = libusb_init(NULL);
 	if (r < 0) {
@@ -137,6 +154,10 @@ int main(void)
 
 	printf("Testing interrupt transfer using loop back test of input/output report\n");
 	test_interrupt_transfer();
+
+	/* printing current time at end of experiment */
+	time(&cur_time);
+	printf("The current Date and Time is: %s\n", ctime(&cur_time));
 
 	libusb_release_interface(devh, 0);
 out:
