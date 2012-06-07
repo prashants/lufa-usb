@@ -36,9 +36,6 @@
 
 #include "GenericHID.h"
 
-
-char Buffer[8];
-
 volatile unsigned int counter = 1;
 
 /** Main program entry point. This routine configures the hardware required by the application, then
@@ -46,10 +43,8 @@ volatile unsigned int counter = 1;
  */
 int main(void)
 {
-	Serial_Init(9600, false);
 	SetupHardware();
 
-	LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
 	sei();
 
 	for (;;)
@@ -70,8 +65,8 @@ void SetupHardware(void)
 	clock_prescale_set(clock_div_1);
 
 	/* Hardware Initialization */
-	LEDs_Init();
 	USB_Init();
+	Serial_Init(9600, false);
 }
 
 /** Event handler for the USB_Connect event. This indicates that the device is enumerating via the status LEDs and
@@ -79,8 +74,6 @@ void SetupHardware(void)
  */
 void EVENT_USB_Device_Connect(void)
 {
-	/* Indicate USB enumerating */
-	LEDs_SetAllLEDs(LEDMASK_USB_ENUMERATING);
 }
 
 /** Event handler for the USB_Disconnect event. This indicates that the device is no longer connected to a host via
@@ -88,8 +81,6 @@ void EVENT_USB_Device_Connect(void)
  */
 void EVENT_USB_Device_Disconnect(void)
 {
-	/* Indicate USB not ready */
-	LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
 }
 
 /** Event handler for the USB_ConfigurationChanged event. This is fired when the host sets the current configuration
@@ -104,9 +95,6 @@ void EVENT_USB_Device_ConfigurationChanged(void)
 	                                            GENERIC_EPSIZE, ENDPOINT_BANK_SINGLE);
 	ConfigSuccess &= Endpoint_ConfigureEndpoint(GENERIC_OUT_EPNUM, EP_TYPE_INTERRUPT, ENDPOINT_DIR_OUT,
 	                                            GENERIC_EPSIZE, ENDPOINT_BANK_SINGLE);
-
-	/* Indicate endpoint configuration success or failure */
-	LEDs_SetAllLEDs(ConfigSuccess ? LEDMASK_USB_READY : LEDMASK_USB_ERROR);
 }
 
 /** Event handler for the USB_ControlRequest event. This is used to catch and process control requests sent to
@@ -162,43 +150,8 @@ void ProcessGenericHIDReport(uint8_t* DataArray)
 		holding the report sent from the host.
 	*/
 
-	//uint8_t NewLEDMask = LEDS_NO_LEDS;
-
-//Serial_SendString("ProcessGenericHIDReport\r\n");
-/*
-	Buffer[0] = DataArray[0];
-	Buffer[1] = DataArray[1];
-	Buffer[2] = DataArray[2];
-	Buffer[3] = DataArray[3];
-	Buffer[4] = DataArray[4];
-	Buffer[5] = DataArray[5];
-	Buffer[6] = DataArray[6];
-	Buffer[7] = DataArray[7];
-*/
-	Buffer[0] = 0;
-	Buffer[1] = 0;
-	Buffer[2] = 0;
-	Buffer[3] = 0;
-	Buffer[4] = 0;
-	Buffer[5] = 0;
-	Buffer[6] = 0;
-	Buffer[7] = 0;
-
-	counter = 1;
-
-	//if (DataArray[0])
-	//  NewLEDMask |= LEDS_LED1;
-
-	//if (DataArray[1])
-	//  NewLEDMask |= LEDS_LED1;
-
-	//if (DataArray[2])
-	//  NewLEDMask |= LEDS_LED1;
-
-	//if (DataArray[3])
-	//  NewLEDMask |= LEDS_LED1;
-
-	//LEDs_SetAllLEDs(NewLEDMask);
+	Serial_SendString("ProcessGenericHIDReport\r\n");
+	counter = 1; /* reset counter to 1 */
 }
 
 /** Function to create the next report to send back to the host at the next reporting interval.
@@ -213,14 +166,13 @@ void CreateGenericHIDReport(uint8_t* DataArray)
 		an array to hold the report to the host.
 	*/
 
-	//uint8_t CurrLEDMask = LEDs_GetLEDs();
 	int temp = 0;
 
-//Serial_SendString("CreateGenericHIDReport\r\n");
+	Serial_SendString("CreateGenericHIDReport\r\n");
 
 	char *c = (char *)&counter;
-	DataArray[0] = *c; //((CurrLEDMask & LEDS_LED1) ? 1 : 0);
-	DataArray[1] = *(c+1); //((CurrLEDMask & LEDS_LED2) ? 1 : 0);
+	DataArray[0] = *c;
+	DataArray[1] = *(c+1);
 	for (temp = 2; temp < 64; temp++)
 		DataArray[temp] = temp;
 	counter++;
@@ -273,7 +225,7 @@ void HID_Task(void)
 	}
 }
 
-/* Taken from the Serial library */
+/* Copied from the serial library */
 void Serial_SendString(const char* StringPtr)
 {
         uint8_t CurrByte;
