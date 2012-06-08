@@ -37,6 +37,7 @@
 #include "GenericHID.h"
 
 volatile unsigned int counter = 1;
+char Buffer[64];
 
 /** Main program entry point. This routine configures the hardware required by the application, then
  *  enters a loop to run the application tasks in sequence.
@@ -156,8 +157,10 @@ void ProcessGenericHIDReport(uint8_t* DataArray)
 		holding the report sent from the host.
 	*/
 
+	int temp = 0;
 	//Serial_SendString("ProcessGenericHIDReport\r\n");
-	//counter = 10; /* reset counter to 1 */
+	for (temp = 2; temp < 64; temp++)
+		Buffer[temp] = DataArray[temp];
 }
 
 /** Function to create the next report to send back to the host at the next reporting interval.
@@ -181,7 +184,7 @@ void CreateGenericHIDReport(uint8_t* DataArray)
 	DataArray[0] = *c;
 	DataArray[1] = *(c+1);
 	for (temp = 2; temp < 64; temp++)
-		DataArray[temp] = temp;
+		DataArray[temp] = Buffer[temp];
 }
 
 void HID_Task(void)
