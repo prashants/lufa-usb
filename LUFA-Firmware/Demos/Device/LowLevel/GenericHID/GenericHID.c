@@ -36,8 +36,11 @@
 
 #include "GenericHID.h"
 
-volatile unsigned int counter = 1;
-char Buffer[64];
+volatile uint8_t counter = 1;
+RingBuffer_t Buffer;
+uint8_t BufferData[70];
+
+void initTimer3(void);
 
 /** Main program entry point. This routine configures the hardware required by the application, then
  *  enters a loop to run the application tasks in sequence.
@@ -46,16 +49,13 @@ int main(void)
 {
 	SetupHardware();
 
+        RingBuffer_InitBuffer(&Buffer, BufferData, sizeof(BufferData));
+        counter = 1;
+
 	sei();
 
 	for (;;)
 	{
-		if (counter > 60000)
-			counter = 0;
-		else
-			counter++;
-
-		_delay_ms(10);
 		HID_Task();
 		USB_USBTask();
 	}
@@ -73,7 +73,7 @@ void SetupHardware(void)
 
 	/* Hardware Initialization */
 	USB_Init();
-	Serial_Init(9600, false);
+        Serial_Init(9600, false);
 }
 
 /** Event handler for the USB_Connect event. This indicates that the device is enumerating via the status LEDs and
@@ -81,6 +81,7 @@ void SetupHardware(void)
  */
 void EVENT_USB_Device_Connect(void)
 {
+	/* Indicate USB enumerating */
 }
 
 /** Event handler for the USB_Disconnect event. This indicates that the device is no longer connected to a host via
@@ -88,6 +89,7 @@ void EVENT_USB_Device_Connect(void)
  */
 void EVENT_USB_Device_Disconnect(void)
 {
+	/* Indicate USB not ready */
 }
 
 /** Event handler for the USB_ConfigurationChanged event. This is fired when the host sets the current configuration
@@ -102,6 +104,8 @@ void EVENT_USB_Device_ConfigurationChanged(void)
 	                                            GENERIC_EPSIZE, ENDPOINT_BANK_SINGLE);
 	ConfigSuccess &= Endpoint_ConfigureEndpoint(GENERIC_OUT_EPNUM, EP_TYPE_INTERRUPT, ENDPOINT_DIR_OUT,
 	                                            GENERIC_EPSIZE, ENDPOINT_BANK_SINGLE);
+
+	/* Indicate endpoint configuration success or failure */
 }
 
 /** Event handler for the USB_ControlRequest event. This is used to catch and process control requests sent to
@@ -156,11 +160,9 @@ void ProcessGenericHIDReport(uint8_t* DataArray)
 		function is called each time the host has sent a new report. DataArray is an array
 		holding the report sent from the host.
 	*/
-
-	int temp = 0;
-	//Serial_SendString("ProcessGenericHIDReport\r\n");
-	for (temp = 2; temp < 64; temp++)
-		Buffer[temp] = DataArray[temp];
+	Serial_SendString("DAQ START COMMAND RECEIVED\r\n");
+        counter = 1;
+        initTimer3();
 }
 
 /** Function to create the next report to send back to the host at the next reporting interval.
@@ -174,17 +176,18 @@ void CreateGenericHIDReport(uint8_t* DataArray)
 		function is called each time the host is ready to accept a new report. DataArray is
 		an array to hold the report to the host.
 	*/
+        uint16_t c = 0;
 
-	int temp = 0;
-	char *c = (char *)&counter;
-	//counter++;
+        for (c = 0; c < GENERIC_REPORT_SIZE; c++) {
+              DataArray[c] = 0;
+        }
+	if (!RingBuffer_IsEmpty(&Buffer)) {
+		DataArray[0] = RingBuffer_Remove(&Buffer);
+	}
 
-	//Serial_SendString("CreateGenericHIDReport\r\n");
-
-	DataArray[0] = *c;
-	DataArray[1] = *(c+1);
-	for (temp = 2; temp < 64; temp++)
-		DataArray[temp] = Buffer[temp];
+	/* returning the free ring buffer count as 2nd byte in the data stream */
+	c = RingBuffer_GetFreeCount(&Buffer);
+	DataArray[1] = c;
 }
 
 void HID_Task(void)
@@ -244,5 +247,24 @@ void Serial_SendString(const char* StringPtr)
                 Serial_SendByte(CurrByte);
                 StringPtr++;
         }
+}
+
+void initTimer3()
+{
+       TCCR3A|=(1<<COM3A0);                         // Toggle mode
+       TCCR3B|=(1<<WGM32)|(1<<CS32);                // CTC mode and CPU clock/256
+       TIMSK3|=(1<<OCIE3A);                         // Output compare interrupt enable
+       OCR3A = 200;                                 // 200 = 3.2 milliseconds
+       TCNT3 = 0;
+}
+
+ISR(TIMER3_COMPA_vect)
+{
+        if (counter == 255)
+                counter = 1;
+        else
+                counter++;
+        if (!RingBuffer_IsFull(&Buffer))
+                RingBuffer_Insert(&Buffer, counter);
 }
 
